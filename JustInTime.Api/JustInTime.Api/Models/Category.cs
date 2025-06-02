@@ -4,5 +4,6 @@
     {
         public Guid Id { get; set; }
         public required string Name { get; set; }
+        public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
     }
 }
