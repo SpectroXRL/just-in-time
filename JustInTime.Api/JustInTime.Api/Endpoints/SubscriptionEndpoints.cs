@@ -1,4 +1,7 @@
-﻿using JustInTime.Api.Models;
+﻿using JustInTime.Api.Contracts.Requests;
+using JustInTime.Api.Contracts.Response;
+using JustInTime.Api.Mappings;
+using JustInTime.Api.Models;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -6,7 +9,21 @@ namespace JustInTime.Api.Endpoints
 {
     public static class SubscriptionEndpoints
     {
-        private static readonly List<Subscription> subscriptions = new ()
+        public static readonly List<Category> categories = new()
+        {
+            new Category
+            {
+                Id = Guid.NewGuid(),
+                Name = "Entertainment"
+            },
+            new Category
+            {
+                Id = Guid.NewGuid(),
+                Name = "Music"
+            },
+        };
+
+        private static readonly List<Subscription> subscriptions = new()
         {
             new Subscription
             {
@@ -16,8 +33,8 @@ namespace JustInTime.Api.Endpoints
                 Cycle = Cycle.Monthly,
                 StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 NextPaymentDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1)),
-                Category = new Category { Id = Guid.NewGuid(), Name = "Entertainment" }
-},
+                CategoryId = categories.FirstOrDefault(category => category.Name == "Entertainment").Id
+            },
             new Subscription
             {
                 Id = Guid.NewGuid(),
@@ -26,7 +43,7 @@ namespace JustInTime.Api.Endpoints
                 Cycle = Cycle.Monthly,
                 StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 NextPaymentDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1)),
-                Category = new Category { Id = Guid.NewGuid(), Name = "Music" }
+                CategoryId = categories.FirstOrDefault(category => category.Name == "Music").Id
             }
         };
 
@@ -48,10 +65,10 @@ namespace JustInTime.Api.Endpoints
 
         private static IResult GetAllSubscriptions()
         {
-            return TypedResults.Ok(subscriptions);
+            return TypedResults.Ok(subscriptions.MapToSubscriptionResponses());
         }
 
-        private static Results<NotFound, Ok<Subscription>> GetSubscriptionById(Guid id)
+        private static Results<NotFound, Ok<SubscriptionResponse>> GetSubscriptionById(Guid id)
         {
             var subscription = subscriptions.FirstOrDefault(s => s.Id == id);
             if(subscription == null)
@@ -59,46 +76,25 @@ namespace JustInTime.Api.Endpoints
                 return TypedResults.NotFound();
             }
 
-            return TypedResults.Ok(subscription);
+            return TypedResults.Ok(subscription.MapToSubscriptionResponse());
         }
 
-        private static IResult CreateSubscription([FromBody] Subscription subscription)
+        private static IResult CreateSubscription([FromBody] CreateSubscriptionRequest request)
         {
-            subscription.Id = Guid.NewGuid();
-            subscription.NextPaymentDate = subscription.Cycle switch
-            {
-                Cycle.Daily => subscription.StartDate.AddDays(1),
-                Cycle.Monthly => subscription.StartDate.AddMonths(1),
-                Cycle.Quarterly => subscription.StartDate.AddMonths(3),
-                Cycle.Annually => subscription.StartDate.AddYears(1),
-                _ => throw new ArgumentOutOfRangeException()
-            };
+            var subscription = request.MapToSubscription();
             subscriptions.Add(subscription);
-            return TypedResults.CreatedAtRoute(subscription, "GetSubscriptionById", new { id = subscription.Id });
+            return TypedResults.CreatedAtRoute(subscription.MapToSubscriptionResponse(), "GetSubscriptionById", new { id = subscription.Id });
         }
 
-        private static Results<NotFound, NoContent> UpdateSubscription([FromBody] Subscription updatedSubscription, Guid id)
+        private static Results<NotFound, NoContent> UpdateSubscription([FromBody] UpdateSubscriptionRequest updatedSubscription, Guid id)
         {
-            var subscription = subscriptions.FirstOrDefault(s => s.Id == id);
-            if (subscription == null)
+            int index = subscriptions.FindIndex(s => s.Id == id);
+            if (index == -1)
             {
                 return TypedResults.NotFound();
             }
 
-            subscription.Name = updatedSubscription.Name;
-            subscription.Cost = updatedSubscription.Cost;
-            subscription.Cycle = updatedSubscription.Cycle;
-            subscription.StartDate = updatedSubscription.StartDate;
-            subscription.NextPaymentDate = updatedSubscription.Cycle switch
-            {
-                Cycle.Daily => updatedSubscription.StartDate.AddDays(1),
-                Cycle.Monthly => updatedSubscription.StartDate.AddMonths(1),
-                Cycle.Quarterly => updatedSubscription.StartDate.AddMonths(3),
-                Cycle.Annually => updatedSubscription.StartDate.AddYears(1),
-                _ => throw new ArgumentOutOfRangeException()
-            };
-            subscription.CategoryId = updatedSubscription.CategoryId;
-            subscription.Category = updatedSubscription.Category;
+            subscriptions[index] = updatedSubscription.MapToSubscription(id);
 
             return TypedResults.NoContent();
         }
