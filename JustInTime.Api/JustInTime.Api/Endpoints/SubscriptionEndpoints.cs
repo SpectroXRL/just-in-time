@@ -63,8 +63,45 @@ namespace JustInTime.Api.Endpoints
             subscriptions.MapDelete("/{id}", DeleteSubscription);
         }
 
-        private static IResult GetAllSubscriptions()
+        private static IResult GetAllSubscriptions(string? categoryName,
+            string? orderOption, string? sortOrder)
         {
+            SubscriptionOrderOptions orderOpt = SubscriptionOrderOptions.Name;
+            if (orderOption != null)
+            {
+                if (!Enum.TryParse<SubscriptionOrderOptions>(orderOption, true, out orderOpt))
+                {
+                    return TypedResults.BadRequest();
+                }
+            };
+
+            if (sortOrder != null && !string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase))
+            {
+                return TypedResults.BadRequest();
+            }
+
+            Guid categoryID = string.IsNullOrEmpty(categoryName) 
+                ? Guid.Empty 
+                : categories.FirstOrDefault(category => category.Name.Equals(categoryName, StringComparison.OrdinalIgnoreCase)).Id;
+
+            var subscriptions = string.IsNullOrEmpty(categoryName)
+                ? SubscriptionEndpoints.subscriptions
+                : SubscriptionEndpoints.subscriptions.Where(s => s.CategoryId == categoryID).ToList();
+
+            var isDescending = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+
+            subscriptions = orderOpt switch
+            {
+                SubscriptionOrderOptions.Name => isDescending ? subscriptions.OrderByDescending(subscription => subscription.Name).ToList() 
+                : subscriptions.OrderBy(subscription => subscription.Name).ToList(),
+                SubscriptionOrderOptions.StartDate => isDescending ? subscriptions.OrderByDescending(subscription => subscription.StartDate).ToList()
+                : subscriptions.OrderBy(subscription => subscription.StartDate).ToList(),
+                SubscriptionOrderOptions.Cost => isDescending ? subscriptions.OrderByDescending(subscription => subscription.Cost).ToList()
+                : subscriptions.OrderBy(subscription => subscription.Cost).ToList(),
+                _ => throw new NotImplementedException(),
+            };
+
             return TypedResults.Ok(subscriptions.MapToSubscriptionResponses());
         }
 
