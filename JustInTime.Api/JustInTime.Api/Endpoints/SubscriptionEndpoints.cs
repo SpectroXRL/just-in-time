@@ -2,6 +2,8 @@
 using JustInTime.Api.Contracts.Response;
 using JustInTime.Api.Mappings;
 using JustInTime.Api.Models;
+using JustInTime.Api.Services.Categories;
+using JustInTime.Api.Services.Subscriptions;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,43 +11,6 @@ namespace JustInTime.Api.Endpoints
 {
     public static class SubscriptionEndpoints
     {
-        public static readonly List<Category> categories = new()
-        {
-            new Category
-            {
-                Id = Guid.NewGuid(),
-                Name = "Entertainment"
-            },
-            new Category
-            {
-                Id = Guid.NewGuid(),
-                Name = "Music"
-            },
-        };
-
-        private static readonly List<Subscription> subscriptions = new()
-        {
-            new Subscription
-            {
-                Id = Guid.NewGuid(),
-                Name = "Netflix",
-                Cost = 15.99m,
-                Cycle = Cycle.Monthly,
-                StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                NextPaymentDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1)),
-                CategoryId = categories.FirstOrDefault(category => category.Name == "Entertainment").Id
-            },
-            new Subscription
-            {
-                Id = Guid.NewGuid(),
-                Name = "Spotify",
-                Cost = 9.99m,
-                Cycle = Cycle.Monthly,
-                StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                NextPaymentDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1)),
-                CategoryId = categories.FirstOrDefault(category => category.Name == "Music").Id
-            }
-        };
 
         public static void RegisterSubscriptionEndpoitns(this IEndpointRouteBuilder app)
         {
@@ -63,87 +28,71 @@ namespace JustInTime.Api.Endpoints
             subscriptions.MapDelete("/{id}", DeleteSubscription);
         }
 
-        private static IResult GetAllSubscriptions(string? categoryName,
-            string? orderOption, string? sortOrder)
+        private static async Task<IResult> GetAllSubscriptions([FromServices]ISubscriptionService subscriptionService,
+            [FromServices]ICategoryService categoryService,
+            string? categoryName, string? orderOption, string? sortOrder)
         {
-            SubscriptionOrderOptions orderOpt = SubscriptionOrderOptions.Name;
-            if (orderOption != null)
-            {
-                if (!Enum.TryParse<SubscriptionOrderOptions>(orderOption, true, out orderOpt))
-                {
-                    return TypedResults.BadRequest();
-                }
-            };
+            var categories = await categoryService.GetCategoriesAsync();
+            //Add category check
+            var categoryId = await categoryService.GetCategoryId(categoryName);
+            var (subscriptions, isValidRequest) = await subscriptionService.GetSubscriptionsAsync(categoryId, orderOption, sortOrder);
 
-            if (sortOrder != null && !string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase))
+            if(!isValidRequest)
             {
                 return TypedResults.BadRequest();
             }
 
-            Guid categoryID = string.IsNullOrEmpty(categoryName) 
-                ? Guid.Empty 
-                : categories.FirstOrDefault(category => category.Name.Equals(categoryName, StringComparison.OrdinalIgnoreCase)).Id;
-
-            var subscriptions = string.IsNullOrEmpty(categoryName)
-                ? SubscriptionEndpoints.subscriptions
-                : SubscriptionEndpoints.subscriptions.Where(s => s.CategoryId == categoryID).ToList();
-
-            var isDescending = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
-
-            subscriptions = orderOpt switch
-            {
-                SubscriptionOrderOptions.Name => isDescending ? subscriptions.OrderByDescending(subscription => subscription.Name).ToList() 
-                : subscriptions.OrderBy(subscription => subscription.Name).ToList(),
-                SubscriptionOrderOptions.StartDate => isDescending ? subscriptions.OrderByDescending(subscription => subscription.StartDate).ToList()
-                : subscriptions.OrderBy(subscription => subscription.StartDate).ToList(),
-                SubscriptionOrderOptions.Cost => isDescending ? subscriptions.OrderByDescending(subscription => subscription.Cost).ToList()
-                : subscriptions.OrderBy(subscription => subscription.Cost).ToList(),
-                _ => throw new NotImplementedException(),
-            };
-
-            return TypedResults.Ok(subscriptions.MapToSubscriptionResponses());
+            return TypedResults.Ok(subscriptions.MapToSubscriptionResponses(categories));
         }
 
-        private static Results<NotFound, Ok<SubscriptionResponse>> GetSubscriptionById(Guid id)
+        private static async Task<Results<NotFound, Ok<SubscriptionResponse>>> GetSubscriptionById([FromServices]ISubscriptionService subscriptionService, 
+            [FromServices]ICategoryService categoryService,  Guid id)
         {
-            var subscription = subscriptions.FirstOrDefault(s => s.Id == id);
-            if(subscription == null)
+            var categories = await categoryService.GetCategoriesAsync();
+            var (subscription, isValidRequest) = await subscriptionService.GetSubscriptionAsync(id);
+
+            if (!isValidRequest)
             {
                 return TypedResults.NotFound();
             }
 
-            return TypedResults.Ok(subscription.MapToSubscriptionResponse());
+            return TypedResults.Ok(subscription.MapToSubscriptionResponse(categories));
         }
 
-        private static IResult CreateSubscription([FromBody] CreateSubscriptionRequest request)
+        private static async Task<IResult> CreateSubscription([FromServices] ISubscriptionService subscriptionService,
+            [FromServices]ICategoryService categoryService,
+            [FromBody] CreateSubscriptionRequest request)
         {
-            var subscription = request.MapToSubscription();
-            subscriptions.Add(subscription);
-            return TypedResults.CreatedAtRoute(subscription.MapToSubscriptionResponse(), "GetSubscriptionById", new { id = subscription.Id });
+            var categories = await categoryService.GetCategoriesAsync();
+            var (subscription, isValidRequest) = await subscriptionService.CreateSubscriptionAsync(request.MapToSubscription(categories));
+
+            return TypedResults.CreatedAtRoute(subscription.MapToSubscriptionResponse(categories), "GetSubscriptionById", new { id = subscription.Id });
         }
 
-        private static Results<NotFound, NoContent> UpdateSubscription([FromBody] UpdateSubscriptionRequest updatedSubscription, Guid id)
+        private static async Task<Results<NotFound, NoContent>> UpdateSubscription([FromServices]ISubscriptionService subscriptionService, 
+            [FromServices]ICategoryService categoryService, [FromBody] UpdateSubscriptionRequest updatedSubscription, Guid id)
         {
-            int index = subscriptions.FindIndex(s => s.Id == id);
-            if (index == -1)
+            var categories = await categoryService.GetCategoriesAsync();
+            var result = await subscriptionService.UpdateSubscriptionAsync(id, updatedSubscription.MapToSubscription(id, categories));
+
+            if (!result)
             {
                 return TypedResults.NotFound();
             }
-
-            subscriptions[index] = updatedSubscription.MapToSubscription(id);
 
             return TypedResults.NoContent();
         }
 
-        private static Results<NotFound, NoContent> DeleteSubscription(Guid id)
+        private static async Task<Results<NotFound, NoContent>> DeleteSubscription([FromServices]ISubscriptionService subscriptionService,
+            Guid id)
         {
-            var subscription = subscriptions.FirstOrDefault(s => s.Id == id);
-            if (subscription == null)
+            var result = await subscriptionService.DeleteSubscriptionAsync(id);
+
+            if (!result)
             {
                 return TypedResults.NotFound();
             }
-            subscriptions.Remove(subscription);
+
             return TypedResults.NoContent();
         }
 
