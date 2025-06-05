@@ -1,13 +1,12 @@
 ﻿using JustInTime.Api.Contracts.Requests;
 using JustInTime.Api.Contracts.Response;
-using JustInTime.Api.Endpoints;
 using JustInTime.Api.Models;
 
 namespace JustInTime.Api.Mappings
 {
     public static class ContractMappings
     {
-        public static Subscription MapToSubscription(this CreateSubscriptionRequest request)
+        public static Subscription MapToSubscription(this CreateSubscriptionRequest request, List<Category> categories)
         {
             return new Subscription
             {
@@ -24,11 +23,11 @@ namespace JustInTime.Api.Mappings
                     Cycle.Annually => request.StartDate.AddYears(1),
                     _ => throw new ArgumentOutOfRangeException()
                 },
-                CategoryId = SubscriptionEndpoints.categories.FirstOrDefault(category => category.Name == request.Category).Id,
+                CategoryId = categories.First(category => category.Name == request.Category).Id,
             };
         }
 
-        public static Subscription MapToSubscription(this UpdateSubscriptionRequest request, Guid id)
+        public static Subscription MapToSubscription(this UpdateSubscriptionRequest request, Guid id, List<Category> categories)
         {
             return new Subscription
             {
@@ -45,11 +44,11 @@ namespace JustInTime.Api.Mappings
                     Cycle.Annually => request.StartDate.AddYears(1),
                     _ => throw new ArgumentOutOfRangeException()
                 },
-                CategoryId = SubscriptionEndpoints.categories.FirstOrDefault(category => category.Name == request.Category).Id,
+                CategoryId = categories.First(category => category.Name == request.Category).Id,
             };
         }
 
-        public static SubscriptionResponse MapToSubscriptionResponse(this Subscription subscription)
+        public static SubscriptionResponse MapToSubscriptionResponse(this Subscription subscription, List<Category> categories)
         {
             return new SubscriptionResponse(
                 subscription.Id,
@@ -58,11 +57,11 @@ namespace JustInTime.Api.Mappings
                 subscription.Cycle,
                 subscription.StartDate,
                 subscription.NextPaymentDate,
-                SubscriptionEndpoints.categories.FirstOrDefault(category => category.Id == subscription.CategoryId)?.Name ?? "Unknown"
+                categories.First(category => category.Id == subscription.CategoryId)?.Name ?? "Unknown"
             );
         }
 
-        public static SubscriptionResponses MapToSubscriptionResponses(this IEnumerable<Subscription> subscriptions)
+        public static SubscriptionResponses MapToSubscriptionResponses(this IEnumerable<Subscription> subscriptions, List<Category> categories)
         {
             decimal monthlyCost = 0;
 
@@ -78,7 +77,7 @@ namespace JustInTime.Api.Mappings
             }
 
             return new SubscriptionResponses(
-                subscriptions.Select(subscription => subscription.MapToSubscriptionResponse()).ToList(),
+                subscriptions.Select(subscription => subscription.MapToSubscriptionResponse(categories)).ToList(),
                 monthlyCost,
                 subscriptions.Count()
                 );

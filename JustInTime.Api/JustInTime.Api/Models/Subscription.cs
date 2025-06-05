@@ -8,7 +8,7 @@ namespace JustInTime.Api.Models
         public Guid Id { get; set; }
 
         [Required, StringLength(100, MinimumLength = 1)]
-        public required string Name { get; set; }
+        public string? Name { get; set; }
 
         [Required, Range(0.01, double.MaxValue, ErrorMessage = "Cost must be a positive value.")]
         public decimal Cost { get; set; }
