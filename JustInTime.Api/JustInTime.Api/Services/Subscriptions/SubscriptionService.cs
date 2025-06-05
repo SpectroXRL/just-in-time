@@ -1,5 +1,4 @@
-﻿using JustInTime.Api.Endpoints;
-using JustInTime.Api.Models;
+﻿using JustInTime.Api.Models;
 using JustInTime.Api.Repositories.Categories;
 using JustInTime.Api.Repositories.Subscriptions;
 

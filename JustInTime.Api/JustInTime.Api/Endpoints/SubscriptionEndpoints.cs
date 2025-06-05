@@ -1,7 +1,6 @@
 ﻿using JustInTime.Api.Contracts.Requests;
 using JustInTime.Api.Contracts.Response;
 using JustInTime.Api.Mappings;
-using JustInTime.Api.Models;
 using JustInTime.Api.Services.Categories;
 using JustInTime.Api.Services.Subscriptions;
 using Microsoft.AspNetCore.Http.HttpResults;

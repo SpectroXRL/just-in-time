@@ -1,6 +1,4 @@
-﻿using JustInTime.Api.Contracts.Requests;
-using JustInTime.Api.Mappings;
-using JustInTime.Api.Models;
+﻿using JustInTime.Api.Models;
 using JustInTime.Api.Repositories.Categories;
 
 namespace JustInTime.Api.Repositories.Subscriptions
